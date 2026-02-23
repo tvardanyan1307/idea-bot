@@ -1,0 +1,6 @@
+aiogram
+aiosqlite
+
+aiogram==3.25.0
+python-dotenv==1.2.1
+aiosqlite==0.22.1
