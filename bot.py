@@ -13,6 +13,7 @@ from aiogram.types import (
     InlineKeyboardButton,
     CallbackQuery,
 )
+from aiohttp import web
 import aiosqlite
 
 
@@ -26,6 +27,29 @@ if not BOT_TOKEN:
         "BOT_TOKEN не найден. Установи переменную окружения BOT_TOKEN "
         "или добавь её в настройки хостинга."
     )
+
+
+async def start_http_server() -> web.AppRunner:
+    """
+    Render Web Service ждёт, что приложение откроет порт.
+    Этот маленький HTTP-сервер нужен только для healthcheck'ов.
+    """
+    port = int(os.getenv("PORT", "10000"))
+
+    async def health(_: web.Request) -> web.Response:
+        return web.Response(text="ok")
+
+    app = web.Application()
+    app.router.add_get("/", health)
+    app.router.add_get("/healthz", health)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=port)
+    await site.start()
+
+    logger.info("HTTP health server started on port %s", port)
+    return runner
 
 
 async def init_db() -> None:
@@ -483,6 +507,7 @@ async def main() -> None:
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
 
+    runner = await start_http_server()
     await bot.set_my_commands(
         [
             BotCommand(command="start", description="О боте"),
@@ -500,7 +525,10 @@ async def main() -> None:
     dp.message.register(handle_text_or_caption)
 
     logger.info("Бот запущен. Нажми Ctrl+C, чтобы остановить.")
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await runner.cleanup()
 
 
 if __name__ == "__main__":
